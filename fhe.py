@@ -45,9 +45,21 @@ def _or(c_1, c_2):
 def is_zero(c):
 	return _not(reduce(_or, c))
 
+def is_negative(c):
+	return c[-1]
+
+def _if(cond, if_true, if_false):
+	true_val = [_and(cond, c_i) for c_i in if_true]
+	false_val = [_and(_not(cond), c_i) for c_i in if_false]
+	return [_xor(t_i, f_i) for t_i, f_i in zip(true_val, false_val)]
+
 def search(D, key):
 	matches = [is_zero(sub(entry, key)) for entry in D]
 	return reduce(_or, matches)
+
+def min_max(c_1, c_2):
+	in_order = is_negative(sub(c_1, c_2))
+	return _if(in_order, c_1, c_2), _if(in_order, c_2, c_1)
 
 def dot(x, y):
 	return sum([Decimal(i) * Decimal(j) for i, j in zip(x, y)])
