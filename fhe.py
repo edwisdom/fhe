@@ -1,8 +1,10 @@
 import math
 import random
+import time
 from functools import reduce
 import numpy as np
-from decimal import *
+from fractions import Fraction
+from mpmath import *
 
 def add(x, y, carry=0, pad=False):
 	result = []
@@ -50,7 +52,16 @@ def search(D, key):
 	return reduce(_or, matches)
 
 def dot(x, y):
-	return sum([Decimal(i) * Decimal(j) for i, j in zip(x, y)])
+	return sum([i * j for i, j in zip(x, y)])
+
+def mod_2(a):
+	print(math.floor(a/mpf(2)))
+	return a - mpf(2) * mpf(math.floor(a / mpf(2)))
+
+def reciprocal(a, n_bits):
+	denom = mpf(2**n_bits)
+	num = round(1/mpf(a) * denom)
+	return mpf(num) / mpf(denom)
 
 def lazy_encrypt(n, num_bits=4):
 	return [(n & (1 << b)) >> b for b in range(num_bits)]
@@ -113,18 +124,19 @@ def fhe_keygen(ld):
 	alpha = math.floor(ld / math.log(ld))
 	beta = math.ceil(ld ** 5 * math.log(ld))
 	prec = ld**2
-	getcontext().prec = prec
+	mp.prec = prec
 	sk, pk, sec_params = she_keygen(ld)
 	indices = np.random.choice(range(0, beta), alpha)
 	s = np.zeros(beta)
 	s[indices] = 1
 	y = []
 	for i in range(beta):	
-		num = Decimal(random.getrandbits(prec))
-		denom = Decimal(2**prec)
-		y.append(num/denom)
+		num = random.getrandbits(prec+1)
+		denom = 2**prec
+		y.append(mpf(num)/mpf(denom))
 	# y = np.random.uniform(low=0, high=2, size=beta)
-	offset = (dot(s, y) % 2) - Decimal(1)/Decimal(sk)
+	subset_sum = reciprocal(sk, prec)
+	offset = (dot(s, y) % 2) - subset_sum
 	# print("Old offset", offset)
 	y[indices[0]] = (y[indices[0]] - offset) % 2
 	# print("New offset", np.dot(s, y) % 2 - 1/sk)
@@ -133,7 +145,8 @@ def fhe_keygen(ld):
 	
 def fhe_sk_encrypt_bit(s_key, msg, sec_params, y):
 	c = she_sk_encrypt_bit(s_key, msg, sec_params)
-	z = [c * i for i in list(y)]
+	z_init = [mpf(c) * mpf(i) for i in list(y)]
+	z = [mod_2(i) for i in z_init]
 	return c, z
 
 def fhe_sk_encrypt(s_key, msg, sec_params, y, n_bits):
@@ -143,7 +156,8 @@ def fhe_sk_encrypt(s_key, msg, sec_params, y, n_bits):
 
 def fhe_pk_encrypt_bit(p_key, msg, y):
 	c = she_pk_encrypt_bit(p_key, msg)
-	z = c * y
+	z_init = [mpf(c) * mpf(i) for i in list(y)]
+	z = [mod_2(i) for i in z_init]
 	return c, z
 
 def fhe_pk_encrypt(p_key, msg, y, n_bits):
@@ -204,11 +218,20 @@ def test_she_add():
 
 
 if __name__ == '__main__':
-	m = 5
-	ld = 8
-	bits = 4
+	m = 1
+	ld = 6
+	bits = 1
+	start = time.time()
 	(sk, s), (pk, y), sec_params = fhe_keygen(ld)
+	end = time.time()
+	print("Key generation took: " + str(end-start) + " seconds.")
+	start = time.time()
 	c = fhe_sk_encrypt(sk, m, sec_params, y, bits)
+	end = time.time()
+	print("Secret key encryption took: " + str(end-start) + " seconds.")
+	start = time.time()
 	d = fhe_decrypt(c, s)
+	end = time.time()
+	print("Decryption took: " + str(end-start) + " seconds.")
 	print("Message decrypted should be", m)
 	print(d)
